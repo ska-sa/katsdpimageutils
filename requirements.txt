@@ -1,4 +1,4 @@
-astropy
+astropy==4.0.1post1
 cycler                    # via matplotlib
 kiwisolver                # via matplotlib
 matplotlib
