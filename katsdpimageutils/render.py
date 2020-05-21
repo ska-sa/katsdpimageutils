@@ -42,8 +42,8 @@ def _prepare_axes(wcs, width, height, image_width, image_height, dpi, slices, bb
 
 def _plot(data, bunit, caption, ax, extent, vmin, vmax, facecolor):
     if bunit == 'JY/BEAM':
-        # This is not FITS-standard, but is AIPS standard and is output by AIPS generated FITS images
-        # as well as older versions of katsdpimager
+        # This is not FITS-standard, but is AIPS standard and is output by AIPS
+        # generated FITS images as well as older versions of katsdpimager.
         unit = units.Jy / units.beam
     else:
         unit = units.Unit(bunit)
@@ -118,7 +118,8 @@ def write_image(input_file, output_file, width=1024, height=768, dpi=DEFAULT_DPI
             xmin = np.min(finite_data[1])
             xmax = np.max(finite_data[1])
             bbox = (xmin, xmax, ymin, ymax)
-        fig, ax = _prepare_axes(wcs.WCS(hdus[0]), width, height, image_width, image_height, dpi, slices, bbox)
+        fig, ax = _prepare_axes(wcs.WCS(hdus[0]), width, height, image_width, image_height,
+                                dpi, slices, bbox)
         bunit = hdus[0].header['BUNIT']
         _plot(data, bunit, caption, ax, None, vmin, vmax, facecolor)
         fig.savefig(output_file)
