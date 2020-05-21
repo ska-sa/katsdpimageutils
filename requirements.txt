@@ -1,0 +1,8 @@
+astropy
+cycler                    # via matplotlib
+kiwisolver                # via matplotlib
+matplotlib
+numpy
+pyparsing                 # via matplotlib
+python-dateutil           # via matplotlib
+six                       # via cycler, python-dateutil
