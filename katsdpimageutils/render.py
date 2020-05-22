@@ -18,9 +18,9 @@ import astropy.wcs as wcs
 from astropy import units
 import astropy.io.fits as fits
 from matplotlib import use
-use('Agg', warn=False)  # noqa: E402
+use('Agg')  # noqa: E402
 import matplotlib.axes
-import matplotlib.pyplot as plt
+import matplotlib.figure
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 import numpy as np
 
@@ -31,7 +31,7 @@ DEFAULT_DPI = 96
 
 
 def _prepare_axes(wcs, width, height, image_width, image_height, dpi, slices, bbox):
-    fig = plt.Figure(figsize=(width / dpi, height / dpi), dpi=dpi)
+    fig = matplotlib.figure.Figure(figsize=(width / dpi, height / dpi), dpi=dpi)
     ax = fig.add_subplot(projection=wcs, slices=slices)
     ax.set_xlabel('Right Ascension')
     ax.set_ylabel('Declination')
