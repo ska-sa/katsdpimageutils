@@ -107,7 +107,7 @@ def _get_frequency(wcs, slices):
 
 
 def write_image(input_file, output_file, width=1024, height=768, dpi=DEFAULT_DPI,
-                slices=('x', 'y', 0, 0), caption=None, facecolor=None):
+                slices=None, caption=None, facecolor=None):
     """Write an image plane to a file from a single FITS file.
 
     Parameters
@@ -120,8 +120,9 @@ def write_image(input_file, output_file, width=1024, height=768, dpi=DEFAULT_DPI
         Dimensions of output image
     dpi : int
         DPI of output image
-    slices : list
-        Choice of image dimensions. Passed to :class:`WCSAxes`
+    slices : tuple
+        Choice of image dimensions. Passed to :class:`WCSAxes`. If not specified,
+        defaults to ('x', 'y', 0, 0, ...).
     caption : Optional[str]
         Optional caption to include in the image
     facecolor : Optional[str]
@@ -130,6 +131,10 @@ def write_image(input_file, output_file, width=1024, height=768, dpi=DEFAULT_DPI
     """
 
     with fits.open(input_file) as hdus:
+        # Fixing disabled due to https://github.com/astropy/astropy/issues/10365
+        wcs = WCS(hdus[0], fix=False)
+        if slices is None:
+            slices = ('x', 'y') + (0,) * (wcs.pixel_n_dim - 2)
         ax_select = tuple(slice(None) if s in ('x', 'y') else s for s in slices[::-1])
         data = hdus[0].data[ax_select]
         vmin, vmax = zscale.zscale(zscale.sample_image(data))
@@ -144,8 +149,6 @@ def write_image(input_file, output_file, width=1024, height=768, dpi=DEFAULT_DPI
             xmin = np.min(finite_data[1])
             xmax = np.max(finite_data[1])
             bbox = (xmin, xmax, ymin, ymax)
-        # Fixing disabled due to https://github.com/astropy/astropy/issues/10365
-        wcs = WCS(hdus[0], fix=False)
         fig, ax = _prepare_axes(wcs, width, height, image_width, image_height,
                                 dpi, slices, bbox)
         bunit = hdus[0].header['BUNIT']
