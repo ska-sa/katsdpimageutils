@@ -21,6 +21,7 @@ from matplotlib import use
 use('Agg')  # noqa: E402
 import matplotlib.axes
 import matplotlib.figure
+import matplotlib.animation as animation
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 import numpy as np
 
@@ -155,3 +156,82 @@ def write_image(input_file, output_file, width=1024, height=768, dpi=DEFAULT_DPI
         frequency = _get_frequency(wcs, slices)
         _plot(data, bunit, caption, ax, None, vmin, vmax, facecolor, frequency)
         fig.savefig(output_file)
+
+
+def write_movie(files, output_file, width=1024, height=768, dpi=DEFAULT_DPI, fps=5.0,
+                slices=None, facecolor=None):
+    """Write a video with an animation of a set of FITS files.
+
+    This code is only designed to work with FITS files written by
+    :func:`katsdpimager.io.write_fits_image` (it makes assumptions about axis
+    order, units etc).
+
+    The field of view is determined by the last image. With increasing
+    frequency, this is usually the one with the smallest field of view,
+    ensuring that the frame is filled in all the images (with pixels
+    clipped from the channels with a wider field of view).
+
+    Note that matplotlib currently uses ffmpeg (the program) to write a video,
+    so it needs to be installed.
+
+    Parameters
+    ----------
+    files : Sequence[Tuple[Optional[str], str]]
+        Pairs of caption and filename.
+    output_file : str
+        Output filename, including extension.
+    width, height : int
+        Nominal dimensions of the video. Due to limitations in matplotlib
+        it might not be exact.
+    fps : float
+        Frames per second in the written video.
+    slices : tuple
+        Choice of image dimensions. Passed to :class:`WCSAxes`. If not specified,
+        defaults to ('x', 'y', 0, 0, ...).
+    facecolor : Optional[str]
+        Optional background color to use in the image plot window.
+        Blanked pixels in the input FITS image will appear in this color.
+    """
+    # Load the last image to get its WCS
+    with fits.open(files[-1][1]) as hdus:
+        # Fixing disabled due to https://github.com/astropy/astropy/issues/10365
+        common_wcs = WCS(hdus[0], fix=False)
+    if slices is None:
+        slices = ('x', 'y') + (0,) * (common_wcs.pixel_n_dim - 2)
+    image_width = common_wcs.pixel_shape[slices.index('x')]
+    image_height = common_wcs.pixel_shape[slices.index('y')]
+    bbox = (0, image_width - 1, 0, image_height - 1)
+    ax_select = tuple(slice(None) if s in ('x', 'y') else s for s in slices[::-1])
+    # Sample all the images to choose data bounds
+    samples = []
+    n_samples = 1000000 // len(files) + 1
+    for caption, filename in files:
+        with fits.open(filename, memmap=True) as hdus:
+            s = zscale.sample_image(hdus[0].data[ax_select],
+                                    max_samples=n_samples, random_offsets=True)
+            samples.append(s)
+    samples = np.concatenate(samples)
+    vmin, vmax = zscale.zscale(samples)
+    fig, ax = _prepare_axes(common_wcs, width, height, image_width, image_height, dpi, slices, bbox)
+
+    def render_channel(caption_filename):
+        caption, filename = caption_filename
+        with fits.open(filename) as hdus:
+            data = hdus[0].data[ax_select]
+            wcs = WCS(hdus[0], fix=False)
+            # Convert corners of the image to world coordinates
+            corners_pix = np.array([
+                [-0.5 if s in ('x', 'y') else s for s in slices],
+                [wcs.pixel_shape[i] - 0.5 if s in ('x', 'y') else s for i, s in enumerate(slices)]
+            ])
+            corners_world = wcs.all_pix2world(corners_pix, 0)
+            # Convert back to pixel coordinates for the plotting WCS
+            corners_data = common_wcs.all_world2pix(corners_world, 0)
+            extent = [corners_data[0, 0], corners_data[1, 0],
+                      corners_data[0, 1], corners_data[1, 1]]
+            bunit = hdus[0].header['BUNIT']
+            frequency = _get_frequency(wcs, slices)
+            _plot(data, bunit, caption, ax, extent, vmin, vmax, facecolor, frequency)
+
+    ani = animation.FuncAnimation(fig, render_channel, files, cache_frame_data=False)
+    ani.save(output_file, fps=fps)
