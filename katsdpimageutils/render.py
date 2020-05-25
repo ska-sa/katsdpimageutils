@@ -14,7 +14,7 @@
 # limitations under the License.
 ################################################################################
 
-import astropy.wcs as wcs
+from astropy.wcs import WCS
 from astropy import units
 import astropy.io.fits as fits
 from matplotlib import use
@@ -40,7 +40,7 @@ def _prepare_axes(wcs, width, height, image_width, image_height, dpi, slices, bb
     return fig, ax
 
 
-def _plot(data, bunit, caption, ax, extent, vmin, vmax, facecolor):
+def _plot(data, bunit, caption, ax, extent, vmin, vmax, facecolor, frequency):
     if bunit == 'JY/BEAM':
         # This is not FITS-standard, but is AIPS standard and is output by AIPS
         # generated FITS images as well as older versions of katsdpimager.
@@ -73,11 +73,37 @@ def _plot(data, bunit, caption, ax, extent, vmin, vmax, facecolor):
         im.set_data(data)
         im.set_extent(extent)
 
+    if frequency is not None:
+        frequency = frequency.to(units.MHz)
+        if caption:
+            caption += f' ({frequency:.4f})'
+        else:
+            caption = f'{frequency:.4f}'
     if caption:
         ax.set_title(f'{caption}')
 
     if facecolor:
         ax.set_facecolor(facecolor)
+
+
+def _get_frequency(wcs, slices):
+    """Determine the frequency of the image, if it is a single frequency.
+
+    This requires that there is a FREQ axis, and that `slices` corresponds to
+    a single value along that axis. If these conditions are not satisfied,
+    returns ``None``.
+    """
+    if wcs.pixel_n_dim != len(slices):
+        raise ValueError('slices must have same length as dimensions of image')
+    for i, axis_type in enumerate(wcs.axis_type_names):
+        if (axis_type == 'FREQ'
+                and all(not wcs.axis_correlation_matrix[i, j] or isinstance(slices[j], int)
+                        for j in range(wcs.pixel_n_dim))):
+            # Arbitrary coordinates matching `slices`
+            pix = [s if isinstance(s, int) else 0 for s in slices]
+            world = wcs.all_pix2world([pix], 0)[0]
+            return world[i] * units.Unit(wcs.world_axis_units[i])
+    return None
 
 
 def write_image(input_file, output_file, width=1024, height=768, dpi=DEFAULT_DPI,
@@ -118,8 +144,11 @@ def write_image(input_file, output_file, width=1024, height=768, dpi=DEFAULT_DPI
             xmin = np.min(finite_data[1])
             xmax = np.max(finite_data[1])
             bbox = (xmin, xmax, ymin, ymax)
-        fig, ax = _prepare_axes(wcs.WCS(hdus[0]), width, height, image_width, image_height,
+        # Fixing disabled due to https://github.com/astropy/astropy/issues/10365
+        wcs = WCS(hdus[0], fix=False)
+        fig, ax = _prepare_axes(wcs, width, height, image_width, image_height,
                                 dpi, slices, bbox)
         bunit = hdus[0].header['BUNIT']
-        _plot(data, bunit, caption, ax, None, vmin, vmax, facecolor)
+        frequency = _get_frequency(wcs, slices)
+        _plot(data, bunit, caption, ax, None, vmin, vmax, facecolor, frequency)
         fig.savefig(output_file)
