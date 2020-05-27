@@ -7,7 +7,7 @@ import katsdpimageutils.render as render
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Create image from FITS file written by katsdpimager.'
+        description='Create image from FITS file'
     )
     parser.add_argument('--width', type=int, default=1024,
                         help='Image width [%(default)s]')
