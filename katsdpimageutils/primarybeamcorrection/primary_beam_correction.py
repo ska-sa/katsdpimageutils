@@ -30,7 +30,7 @@ def get_position(path):
 
     This implementation assumes that the pointing centre is the
     same as the crval.
-    
+
     Parameters
     ----------
     path : str
@@ -194,7 +194,7 @@ def primary_beam_correction(beam_pattern, raw_image, px_cut=0.1):
     Parameters
     ----------
     beam_pattern : numpy array
-        Array of beam pattern 
+        Array of beam pattern
     raw_image : astropy.wcs.wcs.WCS
         WCS keywords in the primary HDU
     px_cut : float
@@ -230,7 +230,7 @@ def _get_value_from_history(keyword, header):
     Return the value of a keyword from the FITS HISTORY in header.
 
     Assumes keyword is found in a line of the HISTORY with format: 'keyword = value'.
-    
+
     Parameters
     ----------
     keyword : str
