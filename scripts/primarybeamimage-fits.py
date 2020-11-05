@@ -45,10 +45,10 @@ def main():
     logging.info('Saving the primary beam corrected image')
     fpath, fext = os.path.splitext(path)
     if outpath is None:
-        outputpath = fpath+'_PB' + fext
+        output_path = fpath + '_PB' + fext
     else:
-        outputpath = outpath
-    pbc.write_new_fits(pbc_image, path, outputFilename=outputpath)
+        output_path = outpath
+    pbc.write_new_fits(pbc_image, path, outputFilename=output_path)
     logging.info('------------------DONE-------------------')
 
 

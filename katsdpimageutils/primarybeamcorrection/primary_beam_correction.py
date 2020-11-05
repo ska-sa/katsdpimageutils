@@ -9,12 +9,15 @@ from astropy import coordinates
 
 def read_fits(path):
     """Read in the FITS file.
- 
+
     Parameters
     ----------
-    input_file : str
+    path : str
         FITS file
-    output_file : astropy object
+
+    Returns
+    -------
+    output_file : astropy.io.fits.hdu.image.PrimaryHDU
         First element of the HDU list
     """
     fl = fits.open(path)
@@ -23,14 +26,22 @@ def read_fits(path):
 
 
 def get_position(path):
-    """Determine the sky coordinate of the phase centre.
+    """Determine the sky coordinate of the pointing centre.
+
+    This implementation assumes that the pointing centre is the
+    same as the crval.
     
     Parameters
     ----------
-    Input: str
+    path : str
         FITS file
-    Output: astropy object
+
+    Returns
+    -------
+    position : astropy.coordinations.SkyCoord
         Sky coordinate of the phase centre
+    image_wcs : astropy.wcs.wcs.WCS
+        WCS keywords in the primary HDU
     """
     # Parse the WCS keywords in the primary HDU
     image_wcs = wcs.WCS(path)
@@ -42,42 +53,38 @@ def get_position(path):
     return phase_center, image_wcs
 
 
-def radial_offset(phase_center, image_wcs, pixcrd):
-    """Determine positions (ra and dec) of the pixels and compute their
-    radial offset from phase centre in radians.
-    
+def radial_offset(phase_center, image_wcs):
+    """Compute radial offset of pixels from the phase centre in radians.
+
     Parameters
     ----------
-    phase_center: astropy object
+    phase_center : astropy.coordinations.SkyCoord
         phase center position
-    image_wcs: atropy object
+    image_wcs : astropy.wcs.wcs.WCS
         WCS keywords in the primary HDU
-    row: numpy array
-        An array of row pixel indices
-    pixcrd: numpy array
-        An array of column pixel coordinates
     """
-  
-    # Pixel coordinates
+    # Get pixel coordinates
+    pixcrd = np.indices((image_wcs.array_shape[2], image_wcs.array_shape[3]))
     row = np.ravel(pixcrd[0])
     col = np.ravel(pixcrd[1])
     # Convert pixel coordinates to world coordinates
-    # The third and fourth argument is "origin" -- in this case we're declaring we
-    # have 0-based (Numpy-like) coordinates.
     p2w = image_wcs.pixel_to_world(col, row, 0, 0)[0]
-    # A separation vector between phase centre and source positions in radians.
+    # Compute a separation vector between phase centre and source positions in radians.
     separation_rad = p2w.separation(phase_center).rad
     return separation_rad
 
 
 def central_freq(path):
     """Determine central frequency of each frequency plane.
-    
+
     Parameters
     ----------
-    Input : str
+    path : str
         FITS file
-    Output : numpy array
+
+    Returns
+    -------
+    output : numpy array
         An array of central frequencie in MHz of each frequency plane.
     """
     images = read_fits(path)
@@ -90,25 +97,27 @@ def central_freq(path):
 
 
 def cosine_power_pattern(separation_rad, c_freq):
-    """Compute Power patterns for a given frequency based on the
-    Cosine-squared power approximation from Mauch et al. (2020).
-    
+    """Compute Power patterns for a given frequency.
+
+    This uses the Cosine-squared power approximation from
+    Mauch et al. (2020).
+
     Parameters
     ----------
-    separation_rad: numpy array
+    separation_rad : numpy array
         Radial separation array
-    c_freq: numpy array
+    c_freq : numpy array
         An array of central frequencies for each frequency plane
     """
     rho = separation_rad
-    # Degrees to radians conversion
+    # convert degrees to radians
     v_beam_rad = np.deg2rad(89.5 / 60.)
     h_beam_rad = np.deg2rad(86.2 / 60.)
-    # Taking the Geometric mean for the vertical and horizontal cut through the beam.
+    # Take the Geometric mean for the vertical and horizontal cut through the beam.
     vh_beam_mean = np.sqrt(v_beam_rad * h_beam_rad)
     flux_density = []
     for nu in c_freq:
-        # Converting GHz to Hz
+        # Convert GHz to Hz
         nu = nu/1.e9
         theta_b = vh_beam_mean / nu
         ratio = rho/theta_b
@@ -120,30 +129,28 @@ def cosine_power_pattern(separation_rad, c_freq):
 
 
 def beam_pattern(path):
-    """Make beam pattern using the Cosine-squared power approximation
-    from Mauch et al. (2020).
-    
+    """Make beam pattern.
+
     Parameters
     ----------
-    input_file : str
+    path : str
         FITS file
     """
-    # Reading the fits file
+    # Read the fits file
     data = read_fits(path)
-    # Getting pixel coordinates
-    pixcrd = np.indices((data.shape[2], data.shape[3]))
-    # Getting the central frequency of the image header given.
+    # Get the central frequency of the image header given.
     c_freq = central_freq(path)
-    # Getting radial separation between sources and the phase centre
+    # Get radial separation between sources and the phase centre
     phase_center, image_wcs = get_position(path)
-    separation_rad = radial_offset(phase_center, image_wcs, pixcrd)
+    separation_rad = radial_offset(phase_center, image_wcs)
     beam_list = cosine_power_pattern(separation_rad, c_freq)
     return beam_list, data
 
 
 def standard_deviation(data):
-    """Compute the median and the estimate of the standard deviation
-    based on the median absolute deviation (MAD).
+    """Compute the median and the estimate of the standard deviation.
+
+    This is based on the median absolute deviation (MAD).
     """
     MAD_TO_SD = 1.4826
     med = np.nanmedian(data)
@@ -152,13 +159,15 @@ def standard_deviation(data):
 
 
 def inverse_variance(data):
-    """ Calculate the inverse variance. Reject pixels more than 5 sigma from
-    the median and reject all zeros until either no more pixels are rejected or
-    a maximum  of 50 iterations is reached.
+    """Calculate the inverse variance.
+
+    Reject pixels more than 5 sigma from the median and reject all zeros
+    until either no more pixels are rejected or a maximum of 50 iterations
+    is reached.
     """
     data = data[data != 0.0]
     if len(data) == 0:
-        return float(0.0), float(0.0)
+        return float(0.0)
     med, sd = standard_deviation(data)
     for i in range(50):
         old_sd = sd
@@ -169,8 +178,6 @@ def inverse_variance(data):
         med, sd = standard_deviation(data)
         if sd == 0.0:
             return 1/(old_sd)**2
-        if i == 49:
-            return 1/(sd)**2
     return 1/(sd)**2
 
 
@@ -183,36 +190,35 @@ def weighted_average(arr, weights):
 
 def primary_beam_correction(beam_pattern, raw_image, px_cut=0.1):
     """Correct the effects of primary beam.
-    
+
     Parameters
     ----------
-    beam_pattern: numpy array
-        Beam battern made from the Cosine-squared power approximation
-        from Mauch et al. (2020).
-    path: astropy object
-        First element of the HDU list
-    px_cut: float
+    beam_pattern : numpy array
+        Array of beam pattern 
+    raw_image : astropy.wcs.wcs.WCS
+        WCS keywords in the primary HDU
+    px_cut : float
        Threshold to cut off all the pixels with attenuated flux less than
        the vulue.
     """
     nterm = raw_image.header['NTERM']
     weight = []
     pbc_image = []
-    # Getting all the pixels with attenuated flux of less than 10% of the peak
+    # Get all the pixels with attenuated flux of less than 10% of the peak
     beam_mask = beam_pattern[-1] <= px_cut
     for i in range(len(beam_pattern)):
-        # Blanking all the pixels with attenuated flux of less than 10% of the peak
+        # Blank all the pixels with attenuated flux of less than 10% of the peak
         beam_pattern[i][beam_mask] = np.nan
-        # Getting the inverse variance (weight) in each frequency plane
+        # Get the inverse variance (weight) in each frequency plane
         # (before primary beam correction)
         weight.append(inverse_variance(np.ravel(raw_image.data[0, i+nterm, :, :])))
-        # To correct the effect of the beam we divide by the beam pattern.
+        # correct the effect of the beam by dividing with the beam pattern.
         ratio = np.ravel(raw_image.data[0, i + nterm, :, :]) / beam_pattern[i]
         pbc_image.append(ratio)
-    # Primary beam corrected (pbc) image
+    # Convert primary beam corrected (pbc) and weight list into numpy array
     pbc_image = np.array(pbc_image)
     weight = np.array(weight)
-    # Calculating a weighted average from the frequency plane images
+    # Calculate a weighted average from the frequency plane images
     corr_image = weighted_average(pbc_image, weight)
     # Add new axis
     corr_image = corr_image.reshape(1, 1, raw_image.data.shape[2], raw_image.data.shape[3])
@@ -221,14 +227,15 @@ def primary_beam_correction(beam_pattern, raw_image, px_cut=0.1):
 
 def _get_value_from_history(keyword, header):
     """
-    Return the value of a keyword from the FITS HISTORY in header
+    Return the value of a keyword from the FITS HISTORY in header.
+
     Assumes keyword is found in a line of the HISTORY with format: 'keyword = value'.
     
     Parameters
     ----------
-      Keyword: str
+    keyword : str
           keyword to search for such as BMAJ, CLEANBMJ and BMIN
-      header: astropy object
+    header : astropy header
           Image header
     """
     for history in header['HISTORY']:
@@ -259,7 +266,7 @@ def write_new_fits(pbc_image, path, outputFilename):
             newhdr['BMIN'] = newhdr['CLEANBMN']
             newhdr['BPA'] = newhdr['CLEANBPA']
         else:
-            # Checking CLEANBMAJ in the history
+            # Check CLEANBMAJ in the history
             newhdr['BMAJ'] = float(_get_value_from_history('BMAJ', newhdr))
             newhdr['BMIN'] = float(_get_value_from_history('BMIN', newhdr))
             newhdr['BPA'] = float(_get_value_from_history('BPA', newhdr))
