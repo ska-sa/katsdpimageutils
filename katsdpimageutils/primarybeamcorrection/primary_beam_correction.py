@@ -167,7 +167,7 @@ def inverse_variance(data):
     """
     data = data[data != 0.0]
     if len(data) == 0:
-        return float(0.0)
+        return 0.0
     med, sd = standard_deviation(data)
     for i in range(50):
         old_sd = sd
