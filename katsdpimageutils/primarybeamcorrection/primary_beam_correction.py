@@ -110,7 +110,6 @@ def cosine_power_pattern(separation_rad, c_freq):
         An array of central frequencies for each frequency plane
     """
     rho = separation_rad
-    # convert degrees to radians
     v_beam_rad = np.deg2rad(89.5 / 60.)
     h_beam_rad = np.deg2rad(86.2 / 60.)
     # Take the Geometric mean for the vertical and horizontal cut through the beam.
@@ -167,7 +166,7 @@ def inverse_variance(data):
     """
     data = data[data != 0.0]
     if len(data) == 0:
-        return float(0.0)
+        return 0.0
     med, sd = standard_deviation(data)
     for i in range(50):
         old_sd = sd
@@ -182,8 +181,7 @@ def inverse_variance(data):
 
 
 def weighted_average(arr, weights):
-    """Compute weighted average of all the frequency planes.
-    """
+    """Compute weighted average of all the frequency planes."""
     wt_average = np.average(arr, weights=weights, axis=0)
     return wt_average
 
@@ -199,7 +197,7 @@ def primary_beam_correction(beam_pattern, raw_image, px_cut=0.1):
         WCS keywords in the primary HDU
     px_cut : float
        Threshold to cut off all the pixels with attenuated flux less than
-       the vulue.
+       the value.
     """
     nterm = raw_image.header['NTERM']
     weight = []

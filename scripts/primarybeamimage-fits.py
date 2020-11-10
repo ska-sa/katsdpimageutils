@@ -18,8 +18,8 @@ def create_parser():
                                      "primary beam corrected image.")
     parser.add_argument('input',
                         help='MeerKAT continuum uncorrected primary beam fits file')
-    parser.add_argument('--dir',
-                        help="The output full path plus file name with '.fits' extention. "
+    parser.add_argument('output', nargs='?',
+                        help="The output full path plus file name with '.fits'  extension. "
                         "e.g. /home/name/primary_beam_image.fits. Default: same directory as "
                         "the input image.")
     return parser
@@ -32,7 +32,7 @@ def main():
     parser = create_parser()
     args = parser.parse_args()
     path = os.path.abspath(args.input)
-    outpath = args.dir
+    outpath = args.output
     logging.info('----------------------------------------')
     logging.info('Getting the beam pattern for each frequency plane based on the '
                  'Cosine-squared power approximation from Mauch et al. (2020).')
