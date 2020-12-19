@@ -193,7 +193,7 @@ def primary_beam_correction(beam_pattern, raw_image, px_cut=0.1):
     ----------
     beam_pattern : numpy array
         Array of beam pattern
-    raw_image :  astropy.io.fits.hdu.image.PrimaryHDU
+    raw_image : astropy.io.fits.hdu.image.PrimaryHDU
         First element of the HDU list
     px_cut : float
        Threshold to cut off all the pixels with attenuated flux less than

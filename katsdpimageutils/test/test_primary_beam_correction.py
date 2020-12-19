@@ -109,7 +109,8 @@ class TestWriteNewFits:
         in_array = np.ones([1, 10, 20, 20])
         hdu = fits.PrimaryHDU(in_array)
         hdu.header['history'] = 'AIPS   CLEAN BMAJ=  5e-03 BMIN=  1e-03 BPA=  42.11'
-        hdu.writeto(self.tmpdir.name + '/image.fits')
+        self.inFileName = os.path.join(self.tmpdir.name, 'image.fits')
+        hdu.writeto(self.inFileName)
 
     def teardown(self):
         self.tmpdir.cleanup()
@@ -117,9 +118,9 @@ class TestWriteNewFits:
     def test_case(self):
         pbc_array = 2 * np.ones([1, 1, 20, 20])
         tmpdir = self.tmpdir
-        path = tmpdir.name + '/image.fits'
-        outFileName = tmpdir.name + '/image_pbc.fits'
-        write_new_fits(pbc_array, path, outFileName)
+        inFileName = self.inFileName
+        outFileName = os.path.join(tmpdir.name, 'image_pbc.fits')
+        write_new_fits(pbc_array, inFileName, outFileName)
         assert os.path.isfile(outFileName)
         PBC_hdu = fits.open(outFileName)[0]
         # Check if the data in the PBC HDU is the same as the input pbc array.
