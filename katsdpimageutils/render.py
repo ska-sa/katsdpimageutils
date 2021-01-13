@@ -132,8 +132,7 @@ def write_image(input_file, output_file, width=1024, height=768, dpi=DEFAULT_DPI
     """
 
     with fits.open(input_file) as hdus:
-        # Fixing disabled due to https://github.com/astropy/astropy/issues/10365
-        wcs = WCS(hdus[0], fix=False)
+        wcs = WCS(hdus[0])
         if slices is None:
             slices = ('x', 'y') + (0,) * (wcs.pixel_n_dim - 2)
         ax_select = tuple(slice(None) if s in ('x', 'y') else s for s in slices[::-1])
