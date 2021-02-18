@@ -113,8 +113,9 @@ def write_image(input_file, output_file, width=1024, height=768, dpi=DEFAULT_DPI
 
     Parameters
     ----------
-    input_file : str
-        Source FITS file
+    input_file : str or :class:`astropy.io.fits.PrimaryHDU`
+        Source FITS file, or loaded FITS image. In the former case, the first
+        HDU is used.
     output_file : str
         Output image file, including extension
     width, height : int
@@ -130,31 +131,33 @@ def write_image(input_file, output_file, width=1024, height=768, dpi=DEFAULT_DPI
         Optional background color to use in the image plot window.
         Blanked pixels in the input FITS image will appear in this color.
     """
+    if not isinstance(input_file, fits.PrimaryHDU):
+        with fits.open(input_file) as hdus:
+            write_image(hdus[0], output_file, width, height, dpi, slices, caption, facecolor)
 
-    with fits.open(input_file) as hdus:
-        wcs = WCS(hdus[0])
-        if slices is None:
-            slices = ('x', 'y') + (0,) * (wcs.pixel_n_dim - 2)
-        ax_select = tuple(slice(None) if s in ('x', 'y') else s for s in slices[::-1])
-        data = hdus[0].data[ax_select]
-        vmin, vmax = zscale.zscale(zscale.sample_image(data))
-        image_height, image_width = data.shape
-        # Work out bounding box surrounding finite data
-        # Plot the lot if any axis is completely blanked
-        finite_data = np.where(np.isfinite(data))
-        bbox = (0, image_width - 1, 0, image_height - 1)
-        if finite_data[0].size > 0:
-            ymin = np.min(finite_data[0])
-            ymax = np.max(finite_data[0])
-            xmin = np.min(finite_data[1])
-            xmax = np.max(finite_data[1])
-            bbox = (xmin, xmax, ymin, ymax)
-        fig, ax = _prepare_axes(wcs, width, height, image_width, image_height,
-                                dpi, slices, bbox)
-        bunit = hdus[0].header['BUNIT']
-        frequency = _get_frequency(wcs, slices)
-        _plot(data, bunit, caption, ax, None, vmin, vmax, facecolor, frequency)
-        fig.savefig(output_file)
+    wcs = WCS(input_file)
+    if slices is None:
+        slices = ('x', 'y') + (0,) * (wcs.pixel_n_dim - 2)
+    ax_select = tuple(slice(None) if s in ('x', 'y') else s for s in slices[::-1])
+    data = input_file.data[ax_select]
+    vmin, vmax = zscale.zscale(zscale.sample_image(data))
+    image_height, image_width = data.shape
+    # Work out bounding box surrounding finite data
+    # Plot the lot if any axis is completely blanked
+    finite_data = np.where(np.isfinite(data))
+    bbox = (0, image_width - 1, 0, image_height - 1)
+    if finite_data[0].size > 0:
+        ymin = np.min(finite_data[0])
+        ymax = np.max(finite_data[0])
+        xmin = np.min(finite_data[1])
+        xmax = np.max(finite_data[1])
+        bbox = (xmin, xmax, ymin, ymax)
+    fig, ax = _prepare_axes(wcs, width, height, image_width, image_height,
+                            dpi, slices, bbox)
+    bunit = input_file.header['BUNIT']
+    frequency = _get_frequency(wcs, slices)
+    _plot(data, bunit, caption, ax, None, vmin, vmax, facecolor, frequency)
+    fig.savefig(output_file)
 
 
 def write_movie(files, output_file, width=1024, height=768, dpi=DEFAULT_DPI, fps=5.0,
