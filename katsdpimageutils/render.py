@@ -133,7 +133,7 @@ def write_image(input_file, output_file, width=1024, height=768, dpi=DEFAULT_DPI
     """
     if not isinstance(input_file, fits.PrimaryHDU):
         with fits.open(input_file) as hdus:
-            write_image(hdus[0], output_file, width, height, dpi, slices, caption, facecolor)
+            return write_image(hdus[0], output_file, width, height, dpi, slices, caption, facecolor)
 
     wcs = WCS(input_file)
     if slices is None:
