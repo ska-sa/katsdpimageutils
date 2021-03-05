@@ -1,8 +1,5 @@
-astropy==4.0.1post1
-cycler                    # via matplotlib
-kiwisolver                # via matplotlib
+-c https://raw.githubusercontent.com/ska-sa/katsdpdockerbase/master/docker-base-build/base-requirements.txt
+
+astropy
 matplotlib
 numpy
-pyparsing                 # via matplotlib
-python-dateutil           # via matplotlib
-six                       # via cycler, python-dateutil
