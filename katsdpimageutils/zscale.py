@@ -150,7 +150,7 @@ def zscale(samples: np.ndarray, *, contrast: float = 0.02, stretch: float = 5.0,
     last_ngoodpix = npix + 1
 
     # Mask used in k-sigma clipping.
-    badpix = np.zeros(npix, dtype=np.bool)
+    badpix = np.zeros(npix, dtype=bool)
 
     # Iterate, until maximum iteration, too many pixels
     # rejected or until no change in number of good pixels
