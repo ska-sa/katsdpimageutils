@@ -42,8 +42,14 @@ class TestInverseVariance:
     def test_all_nans(self):
         data = self.data
         data[:] = np.nan
-        with np.testing.assert_warns(RuntimeWarning):
-            inverse_variance(data)
+        inv_var = inverse_variance(data)
+        assert_equal(inv_var, 0.0)
+
+    def test_mix_nans_zeros(self):
+        data = np.zeros([5])
+        data[0:2] = np.nan
+        inv_var = inverse_variance(data)
+        assert_equal(inv_var, 0.0)
 
     def test_nonans(self):
         data = self.data

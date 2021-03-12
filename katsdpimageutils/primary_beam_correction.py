@@ -168,6 +168,8 @@ def inverse_variance(data):
     if len(data) == 0:
         return 0.0
     med, sd = standard_deviation(data)
+    if ~np.isfinite(sd):
+        return 0.0
     for i in range(50):
         old_sd = sd
         cut = np.abs(data - med) < 5.0 * sd
