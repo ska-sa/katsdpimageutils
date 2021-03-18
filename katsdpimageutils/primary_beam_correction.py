@@ -164,7 +164,7 @@ def inverse_variance(data):
     until either no more pixels are rejected or a maximum of 50 iterations
     is reached.
     """
-    data = data[data != 0.0]
+    data = data[(data != 0.0) & (np.isfinite(data))]
     if len(data) == 0:
         return 0.0
     med, sd = standard_deviation(data)
