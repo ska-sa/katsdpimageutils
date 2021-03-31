@@ -15,7 +15,7 @@ _cosine_taper = katbeam.jimbeam._cosine_taper
 
 def _circular_pattern(x, y, fwhm_x, fwhm_y):
     """Make the beam circular.
-    
+
     Parameters
     ----------
     x, y : arrays of float of the same shape
@@ -29,7 +29,7 @@ def _circular_pattern(x, y, fwhm_x, fwhm_y):
 
 class Circular_Beam(JimBeam):
     """MeerKAT simplified circular primary beam models for L and UHF bands.
-    
+
     This is implementation is based on the katbeam module.
     https://github.com/ska-sa/katbeam.git
     """
