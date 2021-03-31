@@ -3,7 +3,7 @@ import argparse
 import logging
 import os
 
-from primary_beam_correction import Circular_Beam
+from katsdpimageutils.primary_beam_correction import Circular_Beam
 
 
 def initialize_logs():
