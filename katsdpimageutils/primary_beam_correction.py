@@ -72,18 +72,25 @@ def get_position(path):
     return phase_center, image_wcs
 
 
-def get_coordinates(image_wcs):
-    """Compute the coordinates where beam is sampled, in degrees.
+def radial_offset(phase_center, image_wcs):
+    """Compute radial offset of pixels from the phase centre in degrees.
 
     Parameters
     ----------
+    phase_center : astropy.coordinations.SkyCoord
+        phase center position
     image_wcs : astropy.wcs.wcs.WCS
         WCS keywords in the primary HDU
     """
-    beamextent = 2
-    margin = np.linspace(-beamextent/2, beamextent/2, image_wcs.pixel_shape[0])
-    x, y = np.meshgrid(margin, margin)
-    return x, y
+    # Get pixel coordinates
+    pixcrd = np.indices((image_wcs.array_shape[2], image_wcs.array_shape[3]))
+    row = np.ravel(pixcrd[0])
+    col = np.ravel(pixcrd[1])
+    # Convert pixel coordinates to world coordinates
+    p2w = image_wcs.pixel_to_world(col, row, 0, 0)[0]
+    # Compute a separation vector between phase centre and source positions in degrees.
+    separation_deg = p2w.separation(phase_center).deg
+    return separation_deg
 
 
 def central_freq(path):
@@ -117,7 +124,7 @@ def cosine_power_pattern(x, y, path, c_freq):
     Parameters
     ----------
     x, y : arrays of float of the same shape
-        Coordinates where beam is sampled, in degrees
+       Coordinates where beam is sampled, in degrees
     path : str
         FITS file
     c_freq : numpy array
@@ -147,9 +154,12 @@ def beam_pattern(path):
     """
     # Get the central frequency of the image header given.
     c_freq = central_freq(path)
-    # Get radial separation between sources and the phase centre
     phase_center, image_wcs = get_position(path)
-    x, y = get_coordinates(image_wcs)
+    # Get radial separation between sources and the phase centre as well as make y=0
+    # since we are circularising the beam.
+    x = radial_offset(phase_center, image_wcs).reshape(image_wcs.array_shape[2],
+                                                       image_wcs.array_shape[3])
+    y = np.zeros((image_wcs.array_shape[2], image_wcs.array_shape[3]))
     beam_list = cosine_power_pattern(x, y, path, c_freq)
     return beam_list
 
