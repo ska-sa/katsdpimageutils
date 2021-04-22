@@ -1,6 +1,7 @@
 -c https://raw.githubusercontent.com/ska-sa/katsdpdockerbase/master/docker-base-build/base-requirements.txt
 
 astropy
-katbeam @ git+https://github.com/ska-sa/katbeam
 matplotlib
 numpy
+
+katbeam @ git+https://github.com/ska-sa/katbeam

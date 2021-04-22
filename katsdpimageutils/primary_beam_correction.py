@@ -115,6 +115,30 @@ def central_freq(path):
     return np.array(c_freq_plane)
 
 
+def check_band_type(path):
+    raw_image = read_fits(path)
+    try:
+        if 'BANDCODE' in raw_image.header:
+            if raw_image.header['BANDCODE'] == 'L':
+                return 'MKAT-AA-L-JIM-2020'
+            if raw_image.header['BANDCODE'] == 'UHF':
+                return 'MKAT-AA-UHF-JIM-2020'
+            if raw_image.header['BANDCODE'] == 'S':
+                return 'MKAT-AA-L-JIM-2020'
+        else:
+            freqs = central_freq(path)
+            start_freq = freqs[0]/1e6
+            end_freq = freqs[-1]/1e6
+            if start_freq >= 856 and end_freq <= 1712:  # L-band
+                return 'MKAT-AA-L-JIM-2020'
+            if start_freq >= 544 and end_freq <= 1087:  # UHF-band
+                return 'MKAT-AA-UHF-JIM-2020'
+            if start_freq >= 2000 and end_freq <= 4000:  # S-band
+                return 'MKAT-AA-L-JIM-2020'
+    except KeyError:
+        logging.error('Exception occurred, keywords not found', exc_info=True)
+
+
 def cosine_power_pattern(x, y, path, c_freq):
     """Compute Power patterns for a given frequency.
 
@@ -130,12 +154,10 @@ def cosine_power_pattern(x, y, path, c_freq):
     c_freq : numpy array
         An array of central frequencies for each frequency plane
     """
-    # read in fits image and check the band type
-    raw_image = read_fits(path)
-    if round(raw_image.header['CRVAL3']/1e6) == 1284:  # L-band
-        circbeam = CircularBeam('MKAT-AA-L-JIM-2020')
-    if round(raw_image.header['CRVAL3']/1e6) == 816:  # UHF-band
-        circbeam = CircularBeam('MKAT-AA-UHF-JIM-2020')
+    # check the band type
+    band_type = check_band_type(path)
+    # return beam model for the band type
+    circbeam = CircularBeam(band_type)
     flux_density = []
     for nu in c_freq:
         nu = nu/1.e6  # GHz to MHz
