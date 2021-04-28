@@ -11,6 +11,12 @@ import katbeam
 
 _cosine_taper = katbeam.jimbeam._cosine_taper
 
+# Mapping from 'BANDCODE' to katbeam model name
+# NOTE: S-band defaults to L-band model since katbeam has no S-band models
+BAND_MAP = {'L': 'MKAT-AA-L-JIM-2020',
+            'UHF': 'MKAT-AA-UHF-JIM-2020',
+            'S': 'MKAT-AA-L-JIM-2020'}
+
 
 def _circular_pattern(x, y, fwhm_x, fwhm_y):
     """Make the beam circular.
@@ -119,8 +125,6 @@ def check_band_type(path):
     """Check band type using information from the FITS header and return appropriate
        katbeam model name.
 
-    NOTE: S-band defaults to L-band model since katbeam has no S-band models
-
     Parameters
     ----------
     path : str
@@ -131,40 +135,30 @@ def check_band_type(path):
     output_file : str
         katbeam model name
     """
-    # Mapping from 'BANDCODE' to katbeam model name
-    BAND_MAP = {'L': 'MKAT-AA-L-JIM-2020',
-                'UHF': 'MKAT-AA-UHF-JIM-2020',
-                'S': 'MKAT-AA-L-JIM-2020'}
     raw_image = read_fits(path)
     band = raw_image.header.get('BANDCODE')
-    model = BAND_MAP.get(band)
-    logging.info('----------------------------------------')
-    if model is not None:
-        logging.info('The {} model is returned'.format(model))
-        return model
-    if model is None:
-        logging.warning('BANDCODE not found in the FITS header. Therefore, frequency'
-                        ' ranges are used to determine the band.')
+    if band is None:
         logging.info('----------------------------------------')
+        logging.warning('BANDCODE not found in the FITS header. Therefore, frequency ranges'
+                        ' are used to determine the band.')
         freqs = central_freq(path)
         start_freq = freqs[0]/1e6
         end_freq = freqs[-1]/1e6
-        # Define frequency ranges for different bands
-        BAND_FREQ = {'L': [856, 1712], 'UHF': [544, 1087], 'S': [2000, 4000]}
-        if start_freq >= BAND_FREQ['L'][0] and end_freq <= BAND_FREQ['L'][1]:  # L-band
-            logging.info('The {} model is returned.'.format(BAND_MAP['L']))
-            return BAND_MAP['L']
-        if start_freq >= BAND_FREQ['UHF'][0] and end_freq <= BAND_FREQ['UHF'][1]:  # UHF-band
-            logging.info('The {} model is returned.'.format(BAND_MAP['UHF']))
-            return BAND_MAP['UHF']
-        if start_freq >= BAND_FREQ['S'][0] and end_freq <= BAND_FREQ['S'][1]:  # S-band
-            logging.info('The {} model is returned.'.format(BAND_MAP['S']))
-            return BAND_MAP['S']
+        if start_freq >= 856 and end_freq <= 1712:  # L-band
+            band = 'L'
+        elif start_freq >= 544 and end_freq <= 1087:  # UHF-band
+            band = 'UHF'
+        elif start_freq >= 2000 and end_freq <= 4000:  # S-band
+            band = 'S'
         # If BANDCODE and frequency ranges fails, the L-band model is returned by default.
         else:
-            logging.warning('Frequency ranges do not match. Therefore, {} model is'
-                            ' returned.'.format(BAND_MAP['L']))
-            return BAND_MAP['L']
+            logging.info('----------------------------------------')
+            logging.warning('Frequency ranges do not match.')
+            band = 'L'
+    model = BAND_MAP.get(band)
+    logging.info('----------------------------------------')
+    logging.info('The {} katbeam model for the {}-band is used.'.format(BAND_MAP[band], band))
+    return model
 
 
 def cosine_power_pattern(x, y, path, c_freq):
