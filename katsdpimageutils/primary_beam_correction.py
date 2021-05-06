@@ -138,7 +138,6 @@ def check_band_type(path):
     raw_image = read_fits(path)
     band = raw_image.header.get('BANDCODE')
     if band is None:
-        logging.info('----------------------------------------')
         logging.warning('BANDCODE not found in the FITS header. Therefore, frequency ranges'
                         ' are used to determine the band.')
         freqs = central_freq(path)
@@ -152,12 +151,10 @@ def check_band_type(path):
             band = 'S'
         # If BANDCODE and frequency ranges fails, the L-band model is returned by default.
         else:
-            logging.info('----------------------------------------')
-            logging.warning('Frequency ranges do not match.')
+            logging.warning('Frequency ranges do not match. Defalting to L-band frequency range.')
             band = 'L'
     model = BAND_MAP.get(band)
-    logging.info('----------------------------------------')
-    logging.info('The {} katbeam model for the {}-band is used.'.format(BAND_MAP[band], band))
+    logging.warning('The {} katbeam model for the {}-band is used.'.format(model, band))
     return model
 
 
