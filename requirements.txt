@@ -3,3 +3,5 @@
 astropy
 matplotlib
 numpy
+
+katbeam @ git+https://github.com/ska-sa/katbeam

@@ -6,6 +6,31 @@ from astropy.io import fits
 from astropy import wcs
 from astropy import coordinates
 
+import katbeam
+
+
+_cosine_taper = katbeam.jimbeam._cosine_taper
+
+# Mapping from 'BANDCODE' to katbeam model name
+# NOTE: S-band defaults to L-band model since katbeam has no S-band models
+BAND_MAP = {'L': 'MKAT-AA-L-JIM-2020',
+            'UHF': 'MKAT-AA-UHF-JIM-2020',
+            'S': 'MKAT-AA-L-JIM-2020'}
+
+
+def _circular_pattern(x, y, fwhm_x, fwhm_y):
+    """Make the beam circular.
+
+    Parameters
+    ----------
+    x, y : arrays of float of the same shape
+       Coordinates where beam is sampled, in degrees
+    """
+    theta_b = np.sqrt(fwhm_x * fwhm_y)
+    r = np.sqrt(x**2 + y**2)
+    rr = r/theta_b
+    return _cosine_taper(rr)
+
 
 def read_fits(path):
     """Read in the FITS file.
@@ -54,7 +79,7 @@ def get_position(path):
 
 
 def radial_offset(phase_center, image_wcs):
-    """Compute radial offset of pixels from the phase centre in radians.
+    """Compute radial offset of pixels from the phase centre in degrees.
 
     Parameters
     ----------
@@ -69,9 +94,9 @@ def radial_offset(phase_center, image_wcs):
     col = np.ravel(pixcrd[1])
     # Convert pixel coordinates to world coordinates
     p2w = image_wcs.pixel_to_world(col, row, 0, 0)[0]
-    # Compute a separation vector between phase centre and source positions in radians.
-    separation_rad = p2w.separation(phase_center).rad
-    return separation_rad
+    # Compute a separation vector between phase centre and source positions in degrees.
+    separation_deg = p2w.separation(phase_center).deg
+    return separation_deg
 
 
 def central_freq(path):
@@ -96,54 +121,88 @@ def central_freq(path):
     return np.array(c_freq_plane)
 
 
-def cosine_power_pattern(separation_rad, c_freq):
-    """Compute Power patterns for a given frequency.
-
-    This uses the Cosine-squared power approximation from
-    Mauch et al. (2020).
+def check_band_type(path):
+    """Check band type using information from the FITS header and return appropriate
+       katbeam model name.
 
     Parameters
     ----------
-    separation_rad : numpy array
-        Radial separation array
+    path : str
+        FITS file
+
+    Returns
+    -------
+    output_file : str
+        katbeam model name
+    """
+    raw_image = read_fits(path)
+    band = raw_image.header.get('BANDCODE')
+    if band is None:
+        logging.warning('BANDCODE not found in the FITS header. Therefore, frequency ranges'
+                        ' are used to determine the band.')
+        freqs = central_freq(path)
+        start_freq = freqs[0]/1e6
+        end_freq = freqs[-1]/1e6
+        if start_freq >= 856 and end_freq <= 1712:  # L-band
+            band = 'L'
+        elif start_freq >= 544 and end_freq <= 1087:  # UHF-band
+            band = 'UHF'
+        elif start_freq >= 2000 and end_freq <= 4000:  # S-band
+            band = 'S'
+        # If BANDCODE and frequency ranges fails, the L-band model is returned by default.
+        else:
+            logging.warning('Frequency ranges do not match. Defalting to L-band frequency range.')
+            band = 'L'
+    model = BAND_MAP.get(band)
+    logging.warning('The {} katbeam model for the {}-band is used.'.format(model, band))
+    return model
+
+
+def cosine_power_pattern(x, y, path, c_freq):
+    """Compute Power patterns for a given frequency.
+
+    This uses the katbeam module.
+    https://github.com/ska-sa/katbeam.git
+
+    Parameters
+    ----------
+    x, y : arrays of float of the same shape
+       Coordinates where beam is sampled, in degrees
+    path : str
+        FITS file
     c_freq : numpy array
         An array of central frequencies for each frequency plane
     """
-    rho = separation_rad
-    v_beam_rad = np.deg2rad(89.5 / 60.)
-    h_beam_rad = np.deg2rad(86.2 / 60.)
-    # Take the Geometric mean for the vertical and horizontal cut through the beam.
-    vh_beam_mean = np.sqrt(v_beam_rad * h_beam_rad)
+    # check the band type
+    band_type = check_band_type(path)
+    # return beam model for the band type
+    circbeam = CircularBeam(band_type)
     flux_density = []
     for nu in c_freq:
-        # Convert GHz to Hz
-        nu = nu/1.e9
-        theta_b = vh_beam_mean / nu
-        ratio = rho/theta_b
-        num = np.cos(1.189 * np.pi * ratio)
-        den = 1-4 * (1.189 * ratio)**2
-        a_b = (num/den)**2
-        flux_density.append(a_b)
+        nu = nu/1.e6  # GHz to MHz
+        a_b = circbeam.I(x, y, nu)
+        flux_density.append(a_b.ravel())
     return flux_density
 
 
 def beam_pattern(path):
-    """Make beam pattern.
+    """Get beam pattern from katbeam module.
 
     Parameters
     ----------
     path : str
         FITS file
     """
-    # Read the fits file
-    data = read_fits(path)
     # Get the central frequency of the image header given.
     c_freq = central_freq(path)
-    # Get radial separation between sources and the phase centre
     phase_center, image_wcs = get_position(path)
-    separation_rad = radial_offset(phase_center, image_wcs)
-    beam_list = cosine_power_pattern(separation_rad, c_freq)
-    return beam_list, data
+    # Get radial separation between sources and the phase centre as well as make y=0
+    # since we are circularising the beam.
+    x = radial_offset(phase_center, image_wcs).reshape(image_wcs.array_shape[2],
+                                                       image_wcs.array_shape[3])
+    y = np.zeros((image_wcs.array_shape[2], image_wcs.array_shape[3]))
+    beam_list = cosine_power_pattern(x, y, path, c_freq)
+    return beam_list
 
 
 def standard_deviation(data):
@@ -272,3 +331,41 @@ def write_new_fits(pbc_image, path, outputFilename):
         logging.error('Exception occurred, keywords not found', exc_info=True)
     new_hdu = fits.PrimaryHDU(header=newhdr, data=pbc_image)
     return new_hdu.writeto(outputFilename, overwrite=True)
+
+
+class CircularBeam(katbeam.JimBeam):
+    def HH(self, x, y, freqMHz):
+        """Calculate the H co-polarised beam at the provided coordinates.
+
+        Parameters
+        ----------
+        x, y : arrays of float of the same shape
+            Coordinates where beam is sampled, in degrees
+        freqMHz : float
+            Frequency, in MHz
+
+        Returns
+        -------
+        HH : array of float, same shape as `x` and `y`
+            The H co-polarised beam
+        """
+        squint, fwhm = self._interp_squint_fwhm(freqMHz)
+        return _circular_pattern(x, y, fwhm[0], fwhm[1])
+
+    def VV(self, x, y, freqMHz):
+        """Calculate the V co-polarised beam at the provided coordinates.
+
+        Parameters
+        ----------
+        x, y : arrays of float of the same shape
+            Coordinates where beam is sampled, in degrees
+        freqMHz : float
+            Frequency, in MHz
+
+        Returns
+        -------
+        VV : array of float, same shape as `x` and `y`
+            The V co-polarised beam
+        """
+        squint, fwhm = self._interp_squint_fwhm(freqMHz)
+        return _circular_pattern(x, y, fwhm[2], fwhm[3])

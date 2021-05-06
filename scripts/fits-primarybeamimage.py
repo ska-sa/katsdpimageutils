@@ -35,11 +35,12 @@ def main():
     outpath = args.output
     logging.info('----------------------------------------')
     logging.info('Getting the beam pattern for each frequency plane based on the '
-                 'Cosine-squared power approximation from Mauch et al. (2020).')
-    bp, raw_image = pbc.beam_pattern(path)
+                 'katbeam module (https://github.com/ska-sa/katbeam.git).')
+    bp = pbc.beam_pattern(path)
     # pbc - primary beam corrected
     logging.info('----------------------------------------')
     logging.info('Doing the primary beam correction in each frequency plane and averaging')
+    raw_image = pbc.read_fits(path)
     pbc_image = pbc.primary_beam_correction(bp, raw_image, px_cut=0.1)
     logging.info('----------------------------------------')
     logging.info('Saving the primary beam corrected image')
