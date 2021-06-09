@@ -12,10 +12,9 @@ import katbeam
 _cosine_taper = katbeam.jimbeam._cosine_taper
 
 # Mapping from 'BANDCODE' to katbeam model name
-# NOTE: S-band defaults to L-band model since katbeam has no S-band models
 BAND_MAP = {'L': 'MKAT-AA-L-JIM-2020',
             'UHF': 'MKAT-AA-UHF-JIM-2020',
-            'S': 'MKAT-AA-L-JIM-2020'}
+            'S': 'MKAT-AA-S-JIM-2020'}
 
 
 def _circular_pattern(x, y, fwhm_x, fwhm_y):
