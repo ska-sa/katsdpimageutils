@@ -146,7 +146,7 @@ def check_band_type(path):
             band = 'L'
         elif start_freq >= 544 and end_freq <= 1087:  # UHF-band
             band = 'UHF'
-        elif start_freq >= 2000 and end_freq <= 4000:  # S-band
+        elif start_freq >= 1750 and end_freq <= 3500:  # S-band
             band = 'S'
         # If BANDCODE and frequency ranges fails, the L-band model is returned by default.
         else:
