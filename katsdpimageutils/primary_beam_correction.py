@@ -12,10 +12,9 @@ import katbeam
 _cosine_taper = katbeam.jimbeam._cosine_taper
 
 # Mapping from 'BANDCODE' to katbeam model name
-# NOTE: S-band defaults to L-band model since katbeam has no S-band models
 BAND_MAP = {'L': 'MKAT-AA-L-JIM-2020',
             'UHF': 'MKAT-AA-UHF-JIM-2020',
-            'S': 'MKAT-AA-L-JIM-2020'}
+            'S': 'MKAT-AA-S-JIM-2020'}
 
 
 def _circular_pattern(x, y, fwhm_x, fwhm_y):
@@ -147,7 +146,7 @@ def check_band_type(path):
             band = 'L'
         elif start_freq >= 544 and end_freq <= 1087:  # UHF-band
             band = 'UHF'
-        elif start_freq >= 2000 and end_freq <= 4000:  # S-band
+        elif start_freq >= 1750 and end_freq <= 3500:  # S-band
             band = 'S'
         # If BANDCODE and frequency ranges fails, the L-band model is returned by default.
         else:
