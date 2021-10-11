@@ -108,7 +108,7 @@ def _get_frequency(wcs, slices):
 
 
 def write_image(input_file, output_file, width=1024, height=768, dpi=DEFAULT_DPI,
-                slices=None, caption=None, facecolor=None):
+                slices=None, caption=None, facecolor=None, **kwargs):
     """Write an image plane to a file from a single FITS file.
 
     Parameters
@@ -130,17 +130,20 @@ def write_image(input_file, output_file, width=1024, height=768, dpi=DEFAULT_DPI
     facecolor : Optional[str]
         Optional background color to use in the image plot window.
         Blanked pixels in the input FITS image will appear in this color.
+    **kwargs : Optional[dict]
+        Extra keyword arguments, passed to `zscale.zscale`.
     """
     if not isinstance(input_file, fits.PrimaryHDU):
         with fits.open(input_file) as hdus:
-            return write_image(hdus[0], output_file, width, height, dpi, slices, caption, facecolor)
+            return write_image(hdus[0], output_file, width, height, dpi,
+                               slices, caption, facecolor, **kwargs)
 
     wcs = WCS(input_file)
     if slices is None:
         slices = ('x', 'y') + (0,) * (wcs.pixel_n_dim - 2)
     ax_select = tuple(slice(None) if s in ('x', 'y') else s for s in slices[::-1])
     data = input_file.data[ax_select]
-    vmin, vmax = zscale.zscale(zscale.sample_image(data))
+    vmin, vmax = zscale.zscale(zscale.sample_image(data), **kwargs)
     image_height, image_width = data.shape
     # Work out bounding box surrounding finite data
     # Plot the lot if any axis is completely blanked
@@ -161,7 +164,7 @@ def write_image(input_file, output_file, width=1024, height=768, dpi=DEFAULT_DPI
 
 
 def write_movie(files, output_file, width=1024, height=768, dpi=DEFAULT_DPI, fps=5.0,
-                slices=None, facecolor=None):
+                slices=None, facecolor=None, **kwargs):
     """Write a video with an animation of a set of FITS files.
 
     This code is only designed to work with FITS files written by
@@ -193,6 +196,8 @@ def write_movie(files, output_file, width=1024, height=768, dpi=DEFAULT_DPI, fps
     facecolor : Optional[str]
         Optional background color to use in the image plot window.
         Blanked pixels in the input FITS image will appear in this color.
+    **kwargs : Optional[dict]
+        Extra keyword arguments, passed to `zscale.zscale`.
     """
     # Load the last image to get its WCS
     with fits.open(files[-1][1]) as hdus:
@@ -213,7 +218,7 @@ def write_movie(files, output_file, width=1024, height=768, dpi=DEFAULT_DPI, fps
                                     max_samples=n_samples, random_offsets=True)
             samples.append(s)
     samples = np.concatenate(samples)
-    vmin, vmax = zscale.zscale(samples)
+    vmin, vmax = zscale.zscale(samples, **kwargs)
     fig, ax = _prepare_axes(common_wcs, width, height, image_width, image_height, dpi, slices, bbox)
 
     def render_channel(caption_filename):
