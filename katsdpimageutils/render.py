@@ -197,7 +197,7 @@ def write_movie(files, output_file, width=1024, height=768, dpi=DEFAULT_DPI, fps
         Optional background color to use in the image plot window.
         Blanked pixels in the input FITS image will appear in this color.
     **kwargs : Optional[dict]
-        Extra keyword arguments, passed to `zscale.zscale`.
+        Extra keyword arguments, passed to :func:`zscale.zscale`.
     """
     # Load the last image to get its WCS
     with fits.open(files[-1][1]) as hdus:
