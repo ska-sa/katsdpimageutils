@@ -18,14 +18,14 @@ from astropy.wcs import WCS
 from astropy import units
 import astropy.io.fits as fits
 from matplotlib import use
-use('Agg')  # noqa: E402
-import matplotlib.axes
-import matplotlib.figure
-import matplotlib.animation as animation
-from mpl_toolkits.axes_grid1 import make_axes_locatable
-import numpy as np
+use('Agg')                                                  # noqa: E402
+import matplotlib.axes                                      # noqa: E402
+import matplotlib.figure                                    # noqa: E402
+import matplotlib.animation as animation                    # noqa: E402
+from mpl_toolkits.axes_grid1 import make_axes_locatable     # noqa: E402
+import numpy as np                                          # noqa: E402
 
-from . import zscale
+from . import zscale                                        # noqa: E402
 
 
 DEFAULT_DPI = 96
