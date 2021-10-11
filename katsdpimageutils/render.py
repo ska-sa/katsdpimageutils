@@ -131,7 +131,7 @@ def write_image(input_file, output_file, width=1024, height=768, dpi=DEFAULT_DPI
         Optional background color to use in the image plot window.
         Blanked pixels in the input FITS image will appear in this color.
     **kwargs : Optional[dict]
-        Extra keyword arguments, passed to `zscale.zscale`.
+        Extra keyword arguments, passed to :func:`zscale.zscale`.
     """
     if not isinstance(input_file, fits.PrimaryHDU):
         with fits.open(input_file) as hdus:
