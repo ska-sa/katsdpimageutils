@@ -67,13 +67,13 @@ def get_position(path):
     image_wcs : astropy.wcs.wcs.WCS
         WCS keywords in the primary HDU
     """
-    # Parse the WCS keywords in the primary HDU
-    image_wcs = wcs.WCS(path)
+    # Parse the WCS keywords in the primary HDU (only celestial coordinates)
+    image_wcs = wcs.WCS(path).celestial
     # Get pointing centre of the observation
-    phase_centre_ra = image_wcs.celestial.wcs.crval[0]
-    phase_centre_dec = image_wcs.celestial.wcs.crval[1]
+    phase_centre_ra = image_wcs.wcs.crval[0]
+    phase_centre_dec = image_wcs.wcs.crval[1]
     # Convert to astropy.coordinates.SkyCoord object
-    phase_center = coordinates.SkyCoord(phase_centre_ra, phase_centre_dec, unit=(u.deg, u.deg))
+    phase_center = coordinates.SkyCoord(phase_centre_ra*u.deg, phase_centre_dec*u.deg)
     return phase_center, image_wcs
 
 
@@ -88,11 +88,11 @@ def radial_offset(phase_center, image_wcs):
         WCS keywords in the primary HDU
     """
     # Get pixel coordinates
-    pixcrd = np.indices((image_wcs.array_shape[2], image_wcs.array_shape[3]))
+    pixcrd = np.indices(image_wcs.array_shape)
     row = np.ravel(pixcrd[0])
     col = np.ravel(pixcrd[1])
     # Convert pixel coordinates to world coordinates
-    p2w = image_wcs.pixel_to_world(col, row, 0, 0)[0]
+    p2w = wcs.utils.pixel_to_skycoord(col, row, image_wcs)
     # Compute a separation vector between phase centre and source positions in degrees.
     separation_deg = p2w.separation(phase_center).deg
     return separation_deg
@@ -197,9 +197,8 @@ def beam_pattern(path):
     phase_center, image_wcs = get_position(path)
     # Get radial separation between sources and the phase centre as well as make y=0
     # since we are circularising the beam.
-    x = radial_offset(phase_center, image_wcs).reshape(image_wcs.array_shape[2],
-                                                       image_wcs.array_shape[3])
-    y = np.zeros((image_wcs.array_shape[2], image_wcs.array_shape[3]))
+    x = radial_offset(phase_center, image_wcs).reshape(image_wcs.array_shape)
+    y = np.zeros(image_wcs.array_shape)
     beam_list = cosine_power_pattern(x, y, path, c_freq)
     return beam_list
 
@@ -228,10 +227,10 @@ def inverse_variance(data):
     med, sd = standard_deviation(data)
     for i in range(50):
         old_sd = sd
-        cut = np.abs(data - med) < 5.0 * sd
-        if np.all(~cut):
+        keep = np.abs(data - med) < 5.0 * sd
+        if np.all(keep):
             return 1/(sd)**2
-        data = data[cut]
+        data = data[keep]
         med, sd = standard_deviation(data)
         if sd == 0.0:
             return 1/(old_sd)**2
