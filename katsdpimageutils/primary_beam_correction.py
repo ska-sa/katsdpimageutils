@@ -158,47 +158,43 @@ def get_beam_model(header):
     return beam
 
 
-def cosine_power_pattern(x, y, beam, c_freq):
-    """Compute Power patterns for a given frequency.
+def power_pattern(x, y, beam, c_freq):
+    """Compute Power pattern for a given frequency.
 
     This uses the katbeam module.
     https://github.com/ska-sa/katbeam.git
 
     Parameters
     ----------
-    x, y : arrays of float of the same shape
-       Coordinates where beam is sampled, in degrees
+    x, y : float (or array of float)
+       Offsets where beam is sampled, in degrees
     beam : :class:`CircularBeam`
         The beam pattern to sample
     c_freq : list
-        List of central frequencies for each frequency plane
+        List of central frequencies in GHz for each frequency plane
     """
-    flux_density = []
-    for nu in c_freq:
-        nu = nu/1.e6  # GHz to MHz
-        a_b = beam.I(x, y, nu)
-        flux_density.append(a_b.ravel())
-    return flux_density
+    nu = c_freq/1.e6  # GHz to MHz
+    a_b = beam.I(x, y, nu)
+    return a_b
 
 
-def beam_pattern(header, beam):
-    """Get beam pattern from katbeam module.
+def get_offsets(header):
+    """Get the offsets of the image pixels from the ref position specified in header.
 
     Parameters
     ----------
     header : :class:`astropy.io.fits.header.Header`
         FITS header.
-    beam : :class:`CircularBeam`
+    Returns
+    -------
+    ndarray
+        A 2d array of pixel offsets in degrees
     """
-    # Get the central frequency of the image header given.
-    c_freq = central_freq(header)
     phase_center, image_wcs = get_position(header)
     # Get radial separation between sources and the phase centre as well as make y=0
     # since we are circularising the beam.
     x = radial_offset(phase_center, image_wcs).reshape(image_wcs.array_shape)
-    y = np.zeros(image_wcs.array_shape)
-    beam_list = cosine_power_pattern(x, y, beam, c_freq)
-    return beam_list
+    return x
 
 
 def standard_deviation(data):
@@ -235,19 +231,41 @@ def inverse_variance(data):
     return 1/(sd)**2
 
 
-def weighted_average(arr, weights):
-    """Compute weighted average of all the frequency planes."""
-    wt_average = np.average(arr, weights=weights, axis=0)
-    return wt_average
+def _weighted_accum(data, accum, beam, mask=None):
+    """Accumulate the beam corrected data multiplied by its inverse variance
+
+    Parameters
+    ----------
+    data : 2d ndarray
+        The input image data for a single plane
+    accum : 2d ndarray
+        The output accumulator to sum the weighted and PB correcetd data
+    beam : 2d ndarray
+        The beam model
+    mask : 2d ndarray of boolean (optional)
+        A mask to apply to the data array (masked values are set to np.nan)
+        Note: nans will propogate into the sum
+    Returns
+    -------
+    weight : float
+        The inverse variance of the masked data array
+    """
+    if mask is not None:
+        data[mask] = np.nan
+    weight = inverse_variance(data)
+    data *= weight
+    data /= beam
+    accum[:] += data
+    return weight
 
 
-def primary_beam_correction(beam_pattern, raw_image, px_cut=0.1):
+def primary_beam_correction(beam_model, raw_image, px_cut=0.1):
     """Correct the effects of primary beam.
 
     Parameters
     ----------
-    beam_pattern : numpy array
-        Array of beam pattern
+    beam_model : :class:`CircularBeam`
+        The beam model
     raw_image : astropy.io.fits.hdu.image.PrimaryHDU
         First element of the HDU list
     px_cut : float
@@ -255,26 +273,30 @@ def primary_beam_correction(beam_pattern, raw_image, px_cut=0.1):
        the value.
     """
     nterm = raw_image.header['NTERM']
-    weight = []
-    pbc_image = []
-    # Get all the pixels with attenuated flux of less than 10% of the peak
-    beam_mask = beam_pattern[-1] <= px_cut
-    for i in range(len(beam_pattern)):
-        # Blank all the pixels with attenuated flux of less than 10% of the peak
-        beam_pattern[i][beam_mask] = np.nan
-        # Get the inverse variance (weight) in each frequency plane
-        # (before primary beam correction)
-        weight.append(inverse_variance(np.ravel(raw_image.data[0, i+nterm, :, :])))
-        # correct the effect of the beam by dividing with the beam pattern.
-        ratio = np.ravel(raw_image.data[0, i + nterm, :, :]) / beam_pattern[i]
-        pbc_image.append(ratio)
-    # Convert primary beam corrected (pbc) and weight list into numpy array
-    pbc_image = np.array(pbc_image)
-    weight = np.array(weight)
-    # Calculate a weighted average from the frequency plane images
-    corr_image = weighted_average(pbc_image, weight)
-    # Add new axis
-    corr_image = corr_image.reshape(1, 1, raw_image.data.shape[2], raw_image.data.shape[3])
+    nspec = raw_image.header['NSPEC']
+    image_data = raw_image.data
+    weights = np.empty(nspec, dtype=np.float)
+    # Frequencies are in increasing order (from MGImage)
+    freqs = central_freq(raw_image.header)
+    # Get an array of pixel offsets in degrees
+    x = get_offsets(raw_image.header)
+    # Start with the highest frequency to get bounds greater than px_cut
+    accum_image = np.zeros(x.shape, dtype=image_data.dtype)
+    beam_pattern = power_pattern(x, 0, beam_model, freqs[-1])
+    beam_mask = beam_pattern <= px_cut
+    weights[-1] = _weighted_accum(image_data[0, -1], accum_image,
+                                  beam_pattern, mask=beam_mask)
+    # Skip the highest frequency in the loop since we just did it
+    for i, this_freq in enumerate(freqs[:-1]):
+        # Get the beam pattern for this plane
+        beam_pattern = power_pattern(x, 0, beam_model, this_freq)
+        # Accumulate the weighted and beam-crrected data
+        weights[i] = _weighted_accum(image_data[0, nterm+i], accum_image,
+                                     beam_pattern)
+    # Normalise the accumulated image
+    accum_image[:] /= weights.sum()
+    # Add new axes of dimension 1 for FREQ and Stokes
+    corr_image = np.expand_dims(accum_image, axis=(0, 1))
     return corr_image
 
 
@@ -303,7 +325,7 @@ def _get_value_from_history(keyword, header):
 
 def write_new_fits(pbc_image, path, outputFilename):
     """
-    Write out a new FITS image with primary beam corrected continuum in its first plane.
+    Write out a new FITS image with primary beam corrected continuum.
     """
     images = read_fits(path)
     hdr = images.header

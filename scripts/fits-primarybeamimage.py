@@ -38,11 +38,10 @@ def main():
                  'katbeam module (https://github.com/ska-sa/katbeam.git).')
     raw_image = pbc.read_fits(path)
     beam_model = pbc.get_beam_model(raw_image.header)
-    bp = pbc.beam_pattern(raw_image.header, beam_model)
     # pbc - primary beam corrected
     logging.info('----------------------------------------')
     logging.info('Doing the primary beam correction in each frequency plane and averaging')
-    pbc_image = pbc.primary_beam_correction(bp, raw_image, px_cut=0.1)
+    pbc_image = pbc.primary_beam_correction(beam_model, raw_image, px_cut=0.1)
     logging.info('----------------------------------------')
     logging.info('Saving the primary beam corrected image')
     fpath, fext = os.path.splitext(path)
