@@ -49,7 +49,7 @@ def read_fits(path):
     return images
 
 
-def get_position(path):
+def get_position(header):
     """Determine the sky coordinate of the pointing centre.
 
     This implementation assumes that the pointing centre is the
@@ -57,8 +57,8 @@ def get_position(path):
 
     Parameters
     ----------
-    path : str
-        FITS file
+    header : :class:astropy.io.fits.header.Header
+        FITS header.
 
     Returns
     -------
@@ -68,7 +68,7 @@ def get_position(path):
         WCS keywords in the primary HDU
     """
     # Parse the WCS keywords in the primary HDU (only celestial coordinates)
-    image_wcs = wcs.WCS(path).celestial
+    image_wcs = wcs.WCS(header).celestial
     # Get pointing centre of the observation
     phase_centre_ra = image_wcs.wcs.crval[0]
     phase_centre_dec = image_wcs.wcs.crval[1]
@@ -98,48 +98,48 @@ def radial_offset(phase_center, image_wcs):
     return separation_deg
 
 
-def central_freq(path):
+def central_freq(header):
     """Determine central frequency of each frequency plane.
 
     Parameters
     ----------
-    path : str
-        FITS file
+    header : :class:`astropy.io.fits.header.Header`
+        FITS header
 
     Returns
     -------
-    output : numpy array
-        An array of central frequencie in MHz of each frequency plane.
+    output : list
+        A list of central frequencies in MHz of each frequency plane.
     """
-    images = read_fits(path)
     c_freq_plane = []
     # NSPEC -  number of frequency planes.
-    for i in range(1, images.header['NSPEC']+1):
-        # FREQ00X is the central frequency for each plane X.
-        c_freq_plane.append(images.header['FREQ{0:04}'.format(i)])
-    return np.array(c_freq_plane)
+    for i in range(1, header['NSPEC']+1):
+        # FREQXXXX is the central frequency for each plane XXXX.
+        c_freq_plane.append(header['FREQ{0:04}'.format(i)])
+    return c_freq_plane
 
 
-def check_band_type(path):
-    """Check band type using information from the FITS header and return appropriate
-       katbeam model name.
+def get_beam_model(header):
+    """Get the appropriate beam model for the band determined from the FITS header.
+
+    This uses the katbeam module.
+    https://github.com/ska-sa/katbeam.git
 
     Parameters
     ----------
-    path : str
-        FITS file
+    header : :class:`astropy.io.fits.header.Header`
+        FITS header
 
     Returns
     -------
-    output_file : str
-        katbeam model name
+    :class:`CircularBeam`
+        katbeam model
     """
-    raw_image = read_fits(path)
-    band = raw_image.header.get('BANDCODE')
+    band = header.get('BANDCODE')
     if band is None:
         logging.warning('BANDCODE not found in the FITS header. Therefore, frequency ranges'
                         ' are used to determine the band.')
-        freqs = central_freq(path)
+        freqs = central_freq(header)
         start_freq = freqs[0]/1e6
         end_freq = freqs[-1]/1e6
         if start_freq >= 856 and end_freq <= 1712:  # L-band
@@ -154,10 +154,11 @@ def check_band_type(path):
             band = 'L'
     model = BAND_MAP.get(band)
     logging.warning('The {} katbeam model for the {}-band is used.'.format(model, band))
-    return model
+    beam = CircularBeam(model)
+    return beam
 
 
-def cosine_power_pattern(x, y, path, c_freq):
+def cosine_power_pattern(x, y, beam, c_freq):
     """Compute Power patterns for a given frequency.
 
     This uses the katbeam module.
@@ -167,39 +168,36 @@ def cosine_power_pattern(x, y, path, c_freq):
     ----------
     x, y : arrays of float of the same shape
        Coordinates where beam is sampled, in degrees
-    path : str
-        FITS file
-    c_freq : numpy array
-        An array of central frequencies for each frequency plane
+    beam : :class:`CircularBeam`
+        The beam pattern to sample
+    c_freq : list
+        List of central frequencies for each frequency plane
     """
-    # check the band type
-    band_type = check_band_type(path)
-    # return beam model for the band type
-    circbeam = CircularBeam(band_type)
     flux_density = []
     for nu in c_freq:
         nu = nu/1.e6  # GHz to MHz
-        a_b = circbeam.I(x, y, nu)
+        a_b = beam.I(x, y, nu)
         flux_density.append(a_b.ravel())
     return flux_density
 
 
-def beam_pattern(path):
+def beam_pattern(header, beam):
     """Get beam pattern from katbeam module.
 
     Parameters
     ----------
-    path : str
-        FITS file
+    header : :class:`astropy.io.fits.header.Header`
+        FITS header.
+    beam : :class:`CircularBeam`
     """
     # Get the central frequency of the image header given.
-    c_freq = central_freq(path)
-    phase_center, image_wcs = get_position(path)
+    c_freq = central_freq(header)
+    phase_center, image_wcs = get_position(header)
     # Get radial separation between sources and the phase centre as well as make y=0
     # since we are circularising the beam.
     x = radial_offset(phase_center, image_wcs).reshape(image_wcs.array_shape)
     y = np.zeros(image_wcs.array_shape)
-    beam_list = cosine_power_pattern(x, y, path, c_freq)
+    beam_list = cosine_power_pattern(x, y, beam, c_freq)
     return beam_list
 
 
