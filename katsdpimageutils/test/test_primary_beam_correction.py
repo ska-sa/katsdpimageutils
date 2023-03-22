@@ -6,7 +6,11 @@ import tempfile
 from astropy.io import fits
 from nose.tools import assert_equal
 
-from ..primary_beam_correction import _get_value_from_history, weighted_average, inverse_variance, standard_deviation, write_new_fits # noqa E501 
+from ..primary_beam_correction import (_get_value_from_history,
+                                       inverse_variance,
+                                       standard_deviation,
+                                       write_new_fits,
+                                       _weighted_accum)
 
 
 class TestStandardDeviation:
@@ -94,18 +98,54 @@ class TestGetValueFromHistory:
 
 class TestWeightedAverage:
     def setup(self):
-        self.data = np.ones([2, 3])
-        self.weights = 0.2 * np.arange(1, 3)
+        self.data = np.array([10., 25., 30., 60., 100.])
+        self.beam = np.ones(5, dtype=np.float)
+        self.out = np.zeros(5, dtype=np.float)
+        self.MAD_TO_SD = 1.4826
 
     def test_nonans(self):
-        result = weighted_average(self.data, self.weights)
-        np.testing.assert_array_equal(result, np.array([1, 1, 1]))
+        data = self.data.copy()
+        result = _weighted_accum(data, self.out, self.beam)
+        expected_result = 1/(20.0 * self.MAD_TO_SD)**2
+        assert_equal(result, expected_result)
+        np.testing.assert_array_equal(self.out, self.data*expected_result)
+
+    def test_accumulation(self):
+        data = self.data.copy()
+        result_one = _weighted_accum(data, self.out, self.beam)
+        first_out = self.out.copy()
+        data = self.data.copy()
+        result_two = _weighted_accum(data, self.out, self.beam)
+        assert_equal(result_one, result_two)
+        np.testing.assert_array_equal(self.out, 2.0*first_out)
 
     def test_nans(self):
-        data = self.data
-        data[0, 2] = np.nan
-        result = weighted_average(self.data, self.weights)
-        np.testing.assert_array_equal(result, np.array([1, 1, np.nan]))
+        data = self.data.copy()
+        data[0] = np.nan
+        data[1] = np.nan
+        in_data = data.copy()
+        result = _weighted_accum(data, self.out, self.beam)
+        expected_result = 1/(30.0 * self.MAD_TO_SD)**2
+        assert_equal(result, expected_result)
+        np.testing.assert_array_equal(self.out, in_data*expected_result)
+
+    def test_mask(self):
+        data = self.data.copy()
+        in_data = data.copy()
+        in_data[3] = np.nan
+        in_data[4] = np.nan
+        mask = np.array([False, False, False, True, True])
+        result = _weighted_accum(data, self.out, self.beam, mask=mask)
+        expected_result = 1/(5.0 * self.MAD_TO_SD)**2
+        assert_equal(result, expected_result)
+        np.testing.assert_array_equal(self.out, in_data*expected_result)
+
+    def test_allmasked(self):
+        data = self.data.copy()
+        mask = np.array([True, True, True, True, True])
+        result = _weighted_accum(data, self.out, self.beam, mask=mask)
+        assert_equal(result, 0.0)
+        np.testing.assert_array_equal(self.out, np.nan)
 
 
 class TestWriteNewFits:
