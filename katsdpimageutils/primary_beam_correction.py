@@ -49,7 +49,7 @@ def read_fits(path):
     return images
 
 
-def get_position(path):
+def get_position(header):
     """Determine the sky coordinate of the pointing centre.
 
     This implementation assumes that the pointing centre is the
@@ -57,8 +57,8 @@ def get_position(path):
 
     Parameters
     ----------
-    path : str
-        FITS file
+    header : :class:astropy.io.fits.header.Header
+        FITS header.
 
     Returns
     -------
@@ -67,13 +67,13 @@ def get_position(path):
     image_wcs : astropy.wcs.wcs.WCS
         WCS keywords in the primary HDU
     """
-    # Parse the WCS keywords in the primary HDU
-    image_wcs = wcs.WCS(path)
+    # Parse the WCS keywords in the primary HDU (only celestial coordinates)
+    image_wcs = wcs.WCS(header).celestial
     # Get pointing centre of the observation
-    phase_centre_ra = image_wcs.celestial.wcs.crval[0]
-    phase_centre_dec = image_wcs.celestial.wcs.crval[1]
+    phase_centre_ra = image_wcs.wcs.crval[0]
+    phase_centre_dec = image_wcs.wcs.crval[1]
     # Convert to astropy.coordinates.SkyCoord object
-    phase_center = coordinates.SkyCoord(phase_centre_ra, phase_centre_dec, unit=(u.deg, u.deg))
+    phase_center = coordinates.SkyCoord(phase_centre_ra*u.deg, phase_centre_dec*u.deg)
     return phase_center, image_wcs
 
 
@@ -88,58 +88,58 @@ def radial_offset(phase_center, image_wcs):
         WCS keywords in the primary HDU
     """
     # Get pixel coordinates
-    pixcrd = np.indices((image_wcs.array_shape[2], image_wcs.array_shape[3]))
+    pixcrd = np.indices(image_wcs.array_shape)
     row = np.ravel(pixcrd[0])
     col = np.ravel(pixcrd[1])
     # Convert pixel coordinates to world coordinates
-    p2w = image_wcs.pixel_to_world(col, row, 0, 0)[0]
+    p2w = wcs.utils.pixel_to_skycoord(col, row, image_wcs)
     # Compute a separation vector between phase centre and source positions in degrees.
     separation_deg = p2w.separation(phase_center).deg
     return separation_deg
 
 
-def central_freq(path):
+def central_freq(header):
     """Determine central frequency of each frequency plane.
 
     Parameters
     ----------
-    path : str
-        FITS file
+    header : :class:`astropy.io.fits.header.Header`
+        FITS header
 
     Returns
     -------
-    output : numpy array
-        An array of central frequencie in MHz of each frequency plane.
+    output : list
+        A list of central frequencies in MHz of each frequency plane.
     """
-    images = read_fits(path)
     c_freq_plane = []
     # NSPEC -  number of frequency planes.
-    for i in range(1, images.header['NSPEC']+1):
-        # FREQ00X is the central frequency for each plane X.
-        c_freq_plane.append(images.header['FREQ{0:04}'.format(i)])
-    return np.array(c_freq_plane)
+    for i in range(1, header['NSPEC']+1):
+        # FREQXXXX is the central frequency for each plane XXXX.
+        c_freq_plane.append(header['FREQ{0:04}'.format(i)])
+    return c_freq_plane
 
 
-def check_band_type(path):
-    """Check band type using information from the FITS header and return appropriate
-       katbeam model name.
+def get_beam_model(header):
+    """Get the appropriate beam model for the band determined from the FITS header.
+
+    This uses the katbeam module.
+    https://github.com/ska-sa/katbeam.git
 
     Parameters
     ----------
-    path : str
-        FITS file
+    header : :class:`astropy.io.fits.header.Header`
+        FITS header
 
     Returns
     -------
-    output_file : str
-        katbeam model name
+    :class:`CircularBeam`
+        katbeam model
     """
-    raw_image = read_fits(path)
-    band = raw_image.header.get('BANDCODE')
+    band = header.get('BANDCODE')
     if band is None:
         logging.warning('BANDCODE not found in the FITS header. Therefore, frequency ranges'
                         ' are used to determine the band.')
-        freqs = central_freq(path)
+        freqs = central_freq(header)
         start_freq = freqs[0]/1e6
         end_freq = freqs[-1]/1e6
         if start_freq >= 856 and end_freq <= 1712:  # L-band
@@ -154,54 +154,47 @@ def check_band_type(path):
             band = 'L'
     model = BAND_MAP.get(band)
     logging.warning('The {} katbeam model for the {}-band is used.'.format(model, band))
-    return model
+    beam = CircularBeam(model)
+    return beam
 
 
-def cosine_power_pattern(x, y, path, c_freq):
-    """Compute Power patterns for a given frequency.
+def power_pattern(x, y, beam, c_freq):
+    """Compute Power pattern for a given frequency.
 
     This uses the katbeam module.
     https://github.com/ska-sa/katbeam.git
 
     Parameters
     ----------
-    x, y : arrays of float of the same shape
-       Coordinates where beam is sampled, in degrees
-    path : str
-        FITS file
-    c_freq : numpy array
-        An array of central frequencies for each frequency plane
+    x, y : float (or array of float)
+       Offsets where beam is sampled, in degrees
+    beam : :class:`CircularBeam`
+        The beam pattern to sample
+    c_freq : list
+        List of central frequencies in GHz for each frequency plane
     """
-    # check the band type
-    band_type = check_band_type(path)
-    # return beam model for the band type
-    circbeam = CircularBeam(band_type)
-    flux_density = []
-    for nu in c_freq:
-        nu = nu/1.e6  # GHz to MHz
-        a_b = circbeam.I(x, y, nu)
-        flux_density.append(a_b.ravel())
-    return flux_density
+    nu = c_freq/1.e6  # GHz to MHz
+    a_b = beam.I(x, y, nu)
+    return a_b
 
 
-def beam_pattern(path):
-    """Get beam pattern from katbeam module.
+def get_offsets(header):
+    """Get the offsets of the image pixels from the ref position specified in header.
 
     Parameters
     ----------
-    path : str
-        FITS file
+    header : :class:`astropy.io.fits.header.Header`
+        FITS header.
+    Returns
+    -------
+    ndarray
+        A 2d array of pixel offsets in degrees
     """
-    # Get the central frequency of the image header given.
-    c_freq = central_freq(path)
-    phase_center, image_wcs = get_position(path)
+    phase_center, image_wcs = get_position(header)
     # Get radial separation between sources and the phase centre as well as make y=0
     # since we are circularising the beam.
-    x = radial_offset(phase_center, image_wcs).reshape(image_wcs.array_shape[2],
-                                                       image_wcs.array_shape[3])
-    y = np.zeros((image_wcs.array_shape[2], image_wcs.array_shape[3]))
-    beam_list = cosine_power_pattern(x, y, path, c_freq)
-    return beam_list
+    x = radial_offset(phase_center, image_wcs).reshape(image_wcs.array_shape)
+    return x
 
 
 def standard_deviation(data):
@@ -228,29 +221,51 @@ def inverse_variance(data):
     med, sd = standard_deviation(data)
     for i in range(50):
         old_sd = sd
-        cut = np.abs(data - med) < 5.0 * sd
-        if np.all(~cut):
+        keep = np.abs(data - med) < 5.0 * sd
+        if np.all(keep):
             return 1/(sd)**2
-        data = data[cut]
+        data = data[keep]
         med, sd = standard_deviation(data)
         if sd == 0.0:
             return 1/(old_sd)**2
     return 1/(sd)**2
 
 
-def weighted_average(arr, weights):
-    """Compute weighted average of all the frequency planes."""
-    wt_average = np.average(arr, weights=weights, axis=0)
-    return wt_average
+def _weighted_accum(data, accum, beam, mask=None):
+    """Accumulate the beam corrected data multiplied by its inverse variance
+
+    Parameters
+    ----------
+    data : 2d ndarray
+        The input image data for a single plane
+    accum : 2d ndarray
+        The output accumulator to sum the weighted and PB correcetd data
+    beam : 2d ndarray
+        The beam model
+    mask : 2d ndarray of boolean (optional)
+        A mask to apply to the data array (masked values are set to np.nan)
+        Note: nans will propogate into the sum
+    Returns
+    -------
+    weight : float
+        The inverse variance of the masked data array
+    """
+    if mask is not None:
+        data[mask] = np.nan
+    weight = inverse_variance(data)
+    data *= weight
+    data /= beam
+    accum[:] += data
+    return weight
 
 
-def primary_beam_correction(beam_pattern, raw_image, px_cut=0.1):
+def primary_beam_correction(beam_model, raw_image, px_cut=0.1):
     """Correct the effects of primary beam.
 
     Parameters
     ----------
-    beam_pattern : numpy array
-        Array of beam pattern
+    beam_model : :class:`CircularBeam`
+        The beam model
     raw_image : astropy.io.fits.hdu.image.PrimaryHDU
         First element of the HDU list
     px_cut : float
@@ -258,26 +273,30 @@ def primary_beam_correction(beam_pattern, raw_image, px_cut=0.1):
        the value.
     """
     nterm = raw_image.header['NTERM']
-    weight = []
-    pbc_image = []
-    # Get all the pixels with attenuated flux of less than 10% of the peak
-    beam_mask = beam_pattern[-1] <= px_cut
-    for i in range(len(beam_pattern)):
-        # Blank all the pixels with attenuated flux of less than 10% of the peak
-        beam_pattern[i][beam_mask] = np.nan
-        # Get the inverse variance (weight) in each frequency plane
-        # (before primary beam correction)
-        weight.append(inverse_variance(np.ravel(raw_image.data[0, i+nterm, :, :])))
-        # correct the effect of the beam by dividing with the beam pattern.
-        ratio = np.ravel(raw_image.data[0, i + nterm, :, :]) / beam_pattern[i]
-        pbc_image.append(ratio)
-    # Convert primary beam corrected (pbc) and weight list into numpy array
-    pbc_image = np.array(pbc_image)
-    weight = np.array(weight)
-    # Calculate a weighted average from the frequency plane images
-    corr_image = weighted_average(pbc_image, weight)
-    # Add new axis
-    corr_image = corr_image.reshape(1, 1, raw_image.data.shape[2], raw_image.data.shape[3])
+    nspec = raw_image.header['NSPEC']
+    image_data = raw_image.data
+    weights = np.empty(nspec, dtype=np.float)
+    # Frequencies are in increasing order (from MGImage)
+    freqs = central_freq(raw_image.header)
+    # Get an array of pixel offsets in degrees
+    x = get_offsets(raw_image.header)
+    # Start with the highest frequency to get bounds greater than px_cut
+    accum_image = np.zeros(x.shape, dtype=image_data.dtype)
+    beam_pattern = power_pattern(x, 0, beam_model, freqs[-1])
+    beam_mask = beam_pattern <= px_cut
+    weights[-1] = _weighted_accum(image_data[0, -1], accum_image,
+                                  beam_pattern, mask=beam_mask)
+    # Skip the highest frequency in the loop since we just did it
+    for i, this_freq in enumerate(freqs[:-1]):
+        # Get the beam pattern for this plane
+        beam_pattern = power_pattern(x, 0, beam_model, this_freq)
+        # Accumulate the weighted and beam-crrected data
+        weights[i] = _weighted_accum(image_data[0, nterm+i], accum_image,
+                                     beam_pattern)
+    # Normalise the accumulated image
+    accum_image[:] /= weights.sum()
+    # Add new axes of dimension 1 for FREQ and Stokes
+    corr_image = np.expand_dims(accum_image, axis=(0, 1))
     return corr_image
 
 
@@ -306,7 +325,7 @@ def _get_value_from_history(keyword, header):
 
 def write_new_fits(pbc_image, path, outputFilename):
     """
-    Write out a new FITS image with primary beam corrected continuum in its first plane.
+    Write out a new FITS image with primary beam corrected continuum.
     """
     images = read_fits(path)
     hdr = images.header
