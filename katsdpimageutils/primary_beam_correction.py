@@ -275,7 +275,7 @@ def primary_beam_correction(beam_model, raw_image, px_cut=0.1):
     nterm = raw_image.header['NTERM']
     nspec = raw_image.header['NSPEC']
     image_data = raw_image.data
-    weights = np.empty(nspec, dtype=np.float)
+    weights = np.empty(nspec, dtype=float)
     # Frequencies are in increasing order (from MGImage)
     freqs = central_freq(raw_image.header)
     # Get an array of pixel offsets in degrees
