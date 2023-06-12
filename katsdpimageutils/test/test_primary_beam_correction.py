@@ -99,8 +99,8 @@ class TestGetValueFromHistory:
 class TestWeightedAverage:
     def setup(self):
         self.data = np.array([10., 25., 30., 60., 100.])
-        self.beam = np.ones(5, dtype=np.float)
-        self.out = np.zeros(5, dtype=np.float)
+        self.beam = np.ones(5, dtype=float)
+        self.out = np.zeros(5, dtype=float)
         self.MAD_TO_SD = 1.4826
 
     def test_nonans(self):
