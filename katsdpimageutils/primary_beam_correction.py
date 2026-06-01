@@ -367,7 +367,7 @@ class CircularBeam(katbeam.JimBeam):
         HH : array of float, same shape as `x` and `y`
             The H co-polarised beam
         """
-        squint, fwhm = self._interp_squint_fwhm(freqMHz)
+        squint, fwhm = self._interp_squint_fwhm_deg(freqMHz)
         return _circular_pattern(x, y, fwhm[0], fwhm[1])
 
     def VV(self, x, y, freqMHz):
@@ -385,5 +385,5 @@ class CircularBeam(katbeam.JimBeam):
         VV : array of float, same shape as `x` and `y`
             The V co-polarised beam
         """
-        squint, fwhm = self._interp_squint_fwhm(freqMHz)
+        squint, fwhm = self._interp_squint_fwhm_deg(freqMHz)
         return _circular_pattern(x, y, fwhm[2], fwhm[3])
