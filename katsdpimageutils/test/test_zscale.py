@@ -17,13 +17,12 @@
 """Tests for :mod:`katsdpimageutils.zscale`."""
 
 import numpy as np
-from nose.tools import assert_equal, assert_less
 
 from ..zscale import sample_image, zscale
 
 
 class TestSampleImage:
-    def setup(self):
+    def setup_method(self):
         self.image = np.arange(30.0).reshape(5, 6)
 
     def test_undersample(self):
@@ -44,7 +43,7 @@ class TestSampleImage:
     def test_all_nan(self):
         self.image[:] = np.nan
         sample = sample_image(self.image, 10000)
-        assert_equal(sample.size, 0)
+        assert sample.size == 0
 
     def test_random_offsets(self):
         image = np.arange(10000.0).reshape(100, 100)
@@ -58,12 +57,12 @@ class TestSampleImage:
             sample = sample_image(image, n, random_offsets=rs)
             s += np.sum(sample)
         mean = s / n / passes
-        assert_less(4800, mean)
-        assert_less(mean, 5200)
+        assert 4800 < mean
+        assert mean < 5200
 
 
 class TestZscale:
-    def setup(self):
+    def setup_method(self):
         rs = np.random.RandomState(seed=1)
         linear = np.linspace(4.0, 7.0, 1000)
         noise = rs.normal(scale=1e-3, size=linear.shape)
@@ -83,8 +82,8 @@ class TestZscale:
 
     def test_contrast_clip(self):
         z1, z2 = zscale(self.samples, contrast=0.002, stretch=1.0)
-        assert_equal(z1, min(self.samples))
-        assert_equal(z2, max(self.samples))
+        assert z1 == min(self.samples)
+        assert z2 == max(self.samples)
 
     def test_stretch(self):
         z1, z2 = zscale(self.samples, contrast=0.2, stretch=2.0)
